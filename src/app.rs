@@ -1633,10 +1633,10 @@ impl App {
                 if i.key_pressed(Key::Delete) && !i.modifiers.shift {
                     delete_now = true;
                 }
-                if i.key_pressed(Key::R) && !i.modifiers.command {
-                    self.rot = (self.rot + if i.modifiers.shift { 3 } else { 1 }) % 4;
+                if i.key_pressed(Key::E) && !i.modifiers.command {
+                    self.rot = (self.rot + 1) % 4;
                 }
-                if i.key_pressed(Key::L) && !i.modifiers.command {
+                if (i.key_pressed(Key::Q) || i.key_pressed(Key::L)) && !i.modifiers.command {
                     self.rot = (self.rot + 3) % 4;
                 }
                 if i.key_pressed(Key::Num0) || i.key_pressed(Key::Z) {
@@ -1647,7 +1647,7 @@ impl App {
                     self.zoom = Some(1.0);
                     self.pan = Vec2::ZERO;
                 }
-                if i.key_pressed(Key::M) && !i.modifiers.command {
+                if i.key_pressed(Key::C) && !i.modifiers.command {
                     to_comic = true;
                 }
             });
@@ -1658,12 +1658,12 @@ impl App {
         if delete_now {
             self.request_delete(vec![path.clone()]);
         }
-        let key_c = !ctx.egui_wants_keyboard_input()
-            && ctx.input(|i| i.key_pressed(Key::C) && !i.modifiers.command);
+        let key_r = !ctx.egui_wants_keyboard_input()
+            && ctx.input(|i| i.key_pressed(Key::R) && !i.modifiers.command);
 
         // ---- top bar
         let mut do_save = save_now;
-        let mut do_convert = key_c;
+        let mut do_convert = key_r;
         if !fullscreen {
             egui::Panel::top("viewer_top").show(ui, |ui| {
                 ui.add_space(3.0);
@@ -1699,7 +1699,7 @@ impl App {
                         do_save = true;
                     }
                     if ui
-                        .button(format!("{} (C)", tr().convert_resize_menu))
+                        .button(format!("{} (R)", tr().convert_resize_menu))
                         .clicked()
                     {
                         do_convert = true;

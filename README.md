@@ -64,18 +64,18 @@ The toolbar's "Rotate left / Rotate right" **overwrites** the selected files dir
 | Drag | Pan |
 | 0 or Z | Fit to window |
 | 1 | 100% |
-| R / L (or Shift+R) | Rotate right / left (preview first) |
+| E / Q (or L) | Rotate right / left (preview first) |
 | **Ctrl + S** | Save rotation |
 | Ctrl + C | Copy the current image (as a file); paste it on the desktop |
 | Delete | Move the current image to the Recycle Bin and go to the next one |
-| C | Convert / Resize dialog |
+| R | Convert / Resize dialog |
 | F, F11, Double-click | Fullscreen |
 
 Rotation in single image view is only a preview; press Ctrl+S to write it to the file. Moving to another image without saving discards it.
 
 ### Comic Mode
 
-Open it with **M** (or the "📖 Comic mode" button) in single image view, or the "📖 Comic mode" button in the folder toolbar (starts at the selected image). Once on, opening an image keeps using comic mode until you switch back with M.
+Open it with **C** (or the "📖 Comic mode" button) in single image view, or the "📖 Comic mode" button in the folder toolbar (starts at the selected image). Once on, opening an image keeps using comic mode until you switch back with C.
 
 | Key | Action |
 |---|---|
@@ -87,11 +87,11 @@ Open it with **M** (or the "📖 Comic mode" button) in single image view, or th
 | 0 or Z | Fit width |
 | 1 | 100% (of the current image) |
 | Drag | Scroll / pan |
-| **M** | Back to single image view (on the current image) |
+| **C** | Back to single image view (on the current image) |
 | **Enter** / Esc | Back to folder thumbnails |
-| Ctrl + C, Delete, C, F / F11 / Double-click | Same as single image view, on the current image |
+| Ctrl + C, Delete, R, F / F11 / Double-click | Same as single image view, on the current image |
 
-The "current" image is the one a third of the way down the screen; it is what Enter / M / Delete / Ctrl+C act on.
+The "current" image is the one a third of the way down the screen; it is what Enter / C / Delete / Ctrl+C act on.
 
 ## Settings
 

@@ -202,7 +202,7 @@ impl App {
                 if i.key_pressed(Key::F11) || (i.key_pressed(Key::F) && !i.modifiers.command) {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fullscreen));
                 }
-                if i.key_pressed(Key::M) && !i.modifiers.command {
+                if i.key_pressed(Key::C) && !i.modifiers.command {
                     to_single = true;
                 }
                 if i.key_pressed(Key::Plus) || i.key_pressed(Key::Equals) {
@@ -223,7 +223,7 @@ impl App {
                 if i.key_pressed(Key::Delete) && !i.modifiers.shift {
                     delete_now = true;
                 }
-                if i.key_pressed(Key::C) && !i.modifiers.command {
+                if i.key_pressed(Key::R) && !i.modifiers.command {
                     convert_now = true;
                 }
                 // Ctrl+S has no meaning here; keep it from reaching anything else.
@@ -274,7 +274,7 @@ impl App {
                     }
                     ui.separator();
                     if ui
-                        .button(format!("{} (C)", tr().convert_resize_menu))
+                        .button(format!("{} (R)", tr().convert_resize_menu))
                         .clicked()
                     {
                         convert_now = true;
