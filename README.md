@@ -8,6 +8,7 @@ Goal: images open instantly, press Enter to toggle between "single image" and "f
 ## Features
 
 - **Single image view**: decoding starts in the background at launch (in parallel with window creation), and the previous / next images are preloaded, so switching is nearly instant
+- **Comic mode**: all images of the folder stacked top to bottom in one continuous strip, all at the same width — scroll through them like a webtoon / manga reader, zoom in and out (the zoom level is remembered). Image sizes are read from the file headers in the background, so the layout is right before anything is decoded. Images are decoded already scaled to the width they are shown at (JPEGs in the DCT domain), starting with what is on screen and then about two screens ahead in the scroll direction, and at most one new texture is uploaded per frame — so scrolling stays smooth
 - **Folder thumbnails**: multithreaded thumbnail generation, processing only what's visible on screen (plus two rows of look-ahead)
 - **Auto refresh**: the folder is checked in the background every second; any added / deleted / modified files (including changes made by other programs) are picked up automatically while keeping your selection. Modified files get new thumbnails, and thumbnails that failed because a freshly copied file was temporarily locked are retried automatically
 - **Sorting**: choose Name (natural sort) / Modified time / Created time / File size / Type from the toolbar, ascending or descending. Folders always come first, previous / next in single image view follows the same order, and the setting is remembered
@@ -72,12 +73,33 @@ The toolbar's "Rotate left / Rotate right" **overwrites** the selected files dir
 
 Rotation in single image view is only a preview; press Ctrl+S to write it to the file. Moving to another image without saving discards it.
 
+### Comic Mode
+
+Open it with **M** (or the "📖 Comic mode" button) in single image view, or the "📖 Comic mode" button in the folder toolbar (starts at the selected image). Once on, opening an image keeps using comic mode until you switch back with M.
+
+| Key | Action |
+|---|---|
+| Mouse wheel / ↑ ↓ | Scroll (amount per notch adjustable in "⚙ Settings") |
+| PageDown / Space, PageUp / Shift+Space | Scroll one screen |
+| → / ← (Backspace) | Next / previous image (aligned to the top) |
+| Home / End | Beginning / end |
+| Ctrl + Mouse wheel, + / -, toolbar − + | Zoom (centered on the mouse position; remembered) |
+| 0 or Z | Fit width |
+| 1 | 100% (of the current image) |
+| Drag | Scroll / pan |
+| **M** | Back to single image view (on the current image) |
+| **Enter** / Esc | Back to folder thumbnails |
+| Ctrl + C, Delete, C, F / F11 / Double-click | Same as single image view, on the current image |
+
+The "current" image is the one a third of the way down the screen; it is what Enter / M / Delete / Ctrl+C act on.
+
 ## Settings
 
 "⚙ Settings" in the folder thumbnail toolbar:
 
 - UI language (Follow system / 繁體中文 / English / 日本語 / 한국어)
 - Thumbnail rows scrolled per wheel notch (default 1 row), smooth scrolling on/off
+- Comic mode: pixels scrolled per wheel notch / arrow key (default 150 px; also reachable from the comic mode toolbar)
 - Confirm before deleting (on by default; checking "Don't ask again" in the confirmation dialog also turns it off)
 - Window on open: remember last state (size / position / maximized; maximized the first time) or always maximized
 - Stay in the system tray after closing the window (on by default, Windows), and exit automatically after N minutes without opening an image (default 5 minutes)
@@ -123,6 +145,7 @@ Move `github-build.yml` to `.github/workflows/build.yml` and push the folder to 
 ```
 src/main.rs      Startup: parse arguments, start decoding early, open the window
 src/app.rs       UI: folder thumbnails, single image view, dialogs
+src/app/comic.rs Comic mode (vertical strip of all images)
 src/workers.rs   Background thread pool (newest requests first, scrolled-away jobs dropped) and thumbnail cache
 src/decode.rs    Decoding, EXIF orientation, fast JPEG thumbnails, WebP encode/decode
 src/ops.rs       Rotate / convert / resize / batch processing

@@ -1,8 +1,10 @@
+mod comic;
+
 use crate::i18n::{self, fill, tr};
 use crate::ops::{self, Batch, ConvertOptions, OutFormat, ResizeMode};
 use crate::resident;
 use crate::util;
-use crate::workers::{self, FullResult, Pool, ThumbResult};
+use crate::workers::{self, ComicResult, DimsResult, FullResult, Pool, ThumbResult};
 use crossbeam_channel::Receiver;
 use eframe::egui::{
     self, pos2, vec2, Color32, CornerRadius, Key, Modifiers, Pos2, Rect, Sense, Shape, Stroke,
@@ -71,6 +73,8 @@ enum Action {
     Clipboard(bool),
     Paste,
     Delete,
+    /// Open comic mode at the cursor (or the first image).
+    Comic,
 }
 
 /// Result of a background copy / move / delete.
@@ -125,6 +129,23 @@ pub struct App {
     wheel_acc: f32,
     last_wheel_frame: u64,
 
+    // comic mode: a viewer sub-mode showing all images stacked top to bottom
+    comic: bool,
+    /// Image at the top edge of the view and how far into it (0..1 of its height).
+    /// Kept by path so it survives re-layout (zoom, sizes arriving) and rescans.
+    comic_top: Option<(PathBuf, f32)>,
+    comic_pan_x: f32,
+    /// Wheel / key scrolling still to animate (points, + = down).
+    comic_pending: f32,
+    /// Image sizes from file headers, for laying out comic mode ([0, 0] = unreadable).
+    dims: HashMap<PathBuf, [u32; 2]>,
+    dims_pool: Pool<DimsResult>,
+    /// Comic mode textures, decoded at the width they are shown at.
+    comic_full: HashMap<PathBuf, comic::ComicFull>,
+    comic_pool: Pool<ComicResult>,
+    /// Pixel width the comic pool scales new images to.
+    comic_target_w: Arc<AtomicU32>,
+
     convert: Option<ConvertDialog>,
     batch: Option<(Batch, bool)>, // bool = finish handled
     toast: Option<(String, f64)>,
@@ -178,8 +199,13 @@ impl App {
         visuals.panel_fill = Color32::from_gray(32);
         ctx.set_visuals(visuals);
 
+        let comic_target_w = Arc::new(AtomicU32::new(1024));
         let mut app = Self {
             thumb_pool: workers::thumb_pool(ctx.clone()),
+            dims_pool: workers::dims_pool(ctx.clone()),
+            comic_pool: workers::comic_pool(ctx.clone(), comic_target_w.clone(), max_tex.clone()),
+            comic_target_w,
+            comic_full: HashMap::new(),
             ctx,
             mode: if start_file.is_some() {
                 Mode::Viewer
@@ -211,6 +237,11 @@ impl App {
             rot: 0,
             wheel_acc: 0.0,
             last_wheel_frame: u64::MAX,
+            comic: false,
+            comic_top: None,
+            comic_pan_x: 0.0,
+            comic_pending: 0.0,
+            dims: HashMap::new(),
             convert: None,
             batch: None,
             toast: None,
@@ -806,6 +837,9 @@ impl App {
         self.zoom = None;
         self.pan = Vec2::ZERO;
         self.rot = 0;
+        self.comic_top = None;
+        self.comic_pan_x = 0.0;
+        self.comic_pending = 0.0;
     }
 
     fn view_step(&mut self, delta: i64) {
@@ -829,6 +863,8 @@ impl App {
         for p in paths {
             self.full.remove(p);
             self.thumbs.remove(p);
+            self.dims.remove(p);
+            self.comic_full.remove(p);
         }
     }
 
@@ -875,6 +911,7 @@ impl App {
         while let Ok(r) = self.full_pool.rx.try_recv() {
             let st = match r.result {
                 Ok((img, orig)) => {
+                    self.dims.insert(r.path.clone(), orig);
                     let tex = self
                         .ctx
                         .load_texture(r.path.to_string_lossy(), img, TEX_OPTS);
@@ -883,6 +920,10 @@ impl App {
                 Err(e) => Full::Failed(e),
             };
             self.full.insert(r.path, st);
+        }
+        self.poll_comic();
+        while let Ok(r) = self.dims_pool.rx.try_recv() {
+            self.dims.entry(r.path).or_insert(r.dims.unwrap_or([0, 0]));
         }
         while let Ok(r) = self.thumb_pool.rx.try_recv() {
             let st = match r.image {
@@ -1056,6 +1097,14 @@ impl App {
                 }
                 if ui.button(tr().convert_resize_menu).clicked() {
                     actions.push(Action::Convert);
+                }
+                ui.separator();
+                if ui
+                    .button(tr().comic_mode)
+                    .on_hover_text(tr().comic_tip)
+                    .clicked()
+                {
+                    actions.push(Action::Comic);
                 }
                 ui.separator();
                 if ui.button(tr().paste).on_hover_text("Ctrl+V").clicked() {
@@ -1341,6 +1390,21 @@ impl App {
                     let paths = self.selected_paths();
                     self.request_delete(paths);
                 }
+                Action::Comic => {
+                    let p = self
+                        .cursor
+                        .and_then(|c| self.entries.get(c))
+                        .filter(|e| !e.is_dir)
+                        .or_else(|| self.images.first().map(|&i| &self.entries[i]))
+                        .map(|e| e.path.clone());
+                    match p {
+                        Some(p) => {
+                            self.comic = true;
+                            self.open_viewer(p);
+                        }
+                        None => self.toast(tr().no_images),
+                    }
+                }
             }
         }
     }
@@ -1521,6 +1585,7 @@ impl App {
         let mut save_now = false;
         let mut copy_now = false;
         let mut delete_now = false;
+        let mut to_comic = false;
         if !ctx.egui_wants_keyboard_input()
             && self.convert.is_none()
             && self.delete_confirm.is_none()
@@ -1582,6 +1647,9 @@ impl App {
                     self.zoom = Some(1.0);
                     self.pan = Vec2::ZERO;
                 }
+                if i.key_pressed(Key::M) && !i.modifiers.command {
+                    to_comic = true;
+                }
             });
         }
         if copy_now {
@@ -1635,6 +1703,14 @@ impl App {
                         .clicked()
                     {
                         do_convert = true;
+                    }
+                    ui.separator();
+                    if ui
+                        .button(tr().comic_mode)
+                        .on_hover_text(tr().comic_tip)
+                        .clicked()
+                    {
+                        to_comic = true;
                     }
                     ui.separator();
                     let name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -1790,6 +1866,12 @@ impl App {
         }
         if back {
             self.back_to_browser();
+        } else if to_comic {
+            if self.rot != 0 {
+                self.toast(tr().rotation_discarded);
+            }
+            self.reset_view();
+            self.comic = true;
         }
     }
 
@@ -2049,6 +2131,23 @@ impl App {
                         });
                         ui.end_row();
 
+                        ui.label(tr().comic_scroll_per_notch);
+                        ui.horizontal(|ui| {
+                            ui.add(
+                                egui::DragValue::new(&mut s.comic_scroll_step)
+                                    .range(util::COMIC_STEP_MIN..=util::COMIC_STEP_MAX)
+                                    .speed(2.0)
+                                    .fixed_decimals(0)
+                                    .suffix(" px"),
+                            );
+                            for v in [80.0f32, 150.0, 300.0, 600.0] {
+                                if ui.small_button(format!("{v}")).clicked() {
+                                    s.comic_scroll_step = v;
+                                }
+                            }
+                        });
+                        ui.end_row();
+
                         ui.label(tr().smooth_scroll);
                         ui.checkbox(&mut s.smooth_scroll, "");
                         ui.end_row();
@@ -2216,6 +2315,7 @@ impl App {
             // Free what is only needed while visible (GPU textures, pending decodes).
             self.full.clear();
             self.thumbs.clear();
+            self.free_comic();
             self.full_pool.set_wanted([]);
             self.thumb_pool.set_wanted([]);
             while self.full_pool.rx.try_recv().is_ok() {}
@@ -2295,6 +2395,7 @@ impl eframe::App for App {
 
         match self.mode {
             Mode::Browser => self.browser_ui(ui),
+            Mode::Viewer if self.comic => self.comic_ui(ui),
             Mode::Viewer => self.viewer_ui(ui),
         }
         self.convert_window();

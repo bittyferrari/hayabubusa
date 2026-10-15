@@ -199,6 +199,13 @@ impl SortKey {
     }
 }
 
+/// Range of `Settings::comic_zoom`.
+pub const COMIC_ZOOM_MIN: f32 = 0.1;
+pub const COMIC_ZOOM_MAX: f32 = 8.0;
+/// Range of `Settings::comic_scroll_step` (points per wheel notch).
+pub const COMIC_STEP_MIN: f32 = 20.0;
+pub const COMIC_STEP_MAX: f32 = 3000.0;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
     /// Thumbnail rows scrolled per mouse-wheel notch.
@@ -221,6 +228,10 @@ pub struct Settings {
     pub idle_exit_min: u32,
     /// UI language; `None` = follow the system language.
     pub lang: Option<crate::i18n::Lang>,
+    /// Comic mode page width as a fraction of the window width (1.0 = fit width).
+    pub comic_zoom: f32,
+    /// Comic mode: points scrolled per mouse-wheel notch / arrow key.
+    pub comic_scroll_step: f32,
 }
 
 impl Default for Settings {
@@ -239,6 +250,8 @@ impl Default for Settings {
             stay_resident: true,
             idle_exit_min: 5,
             lang: None,
+            comic_zoom: 1.0,
+            comic_scroll_step: 150.0,
         }
     }
 }
@@ -305,6 +318,20 @@ impl Settings {
                     }
                 }
                 "lang" => s.lang = crate::i18n::Lang::from_id(v),
+                "comic_scroll_step" => {
+                    if let Ok(x) = v.parse::<f32>() {
+                        if x.is_finite() {
+                            s.comic_scroll_step = x.clamp(COMIC_STEP_MIN, COMIC_STEP_MAX);
+                        }
+                    }
+                }
+                "comic_zoom" => {
+                    if let Ok(x) = v.parse::<f32>() {
+                        if x.is_finite() {
+                            s.comic_zoom = x.clamp(COMIC_ZOOM_MIN, COMIC_ZOOM_MAX);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -338,6 +365,8 @@ impl Settings {
         out += &format!("stay_resident={}\n", self.stay_resident as u8);
         out += &format!("idle_exit_min={}\n", self.idle_exit_min);
         out += &format!("lang={}\n", self.lang.map_or("auto", |l| l.id()));
+        out += &format!("comic_zoom={}\n", self.comic_zoom);
+        out += &format!("comic_scroll_step={}\n", self.comic_scroll_step);
         let f = settings_file();
         if let Some(parent) = f.parent() {
             let _ = std::fs::create_dir_all(parent);

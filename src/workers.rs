@@ -186,3 +186,86 @@ pub fn thumb_pool(ctx: egui::Context) -> Pool<ThumbResult> {
         ThumbResult { path, image }
     })
 }
+
+// ---------------------------------------------------------------- image sizes
+
+/// Image size from the file header (`None` = unreadable). Used to lay out comic mode
+/// before the images are decoded.
+pub struct DimsResult {
+    pub path: PathBuf,
+    pub dims: Option<[u32; 2]>,
+}
+
+pub fn dims_pool(ctx: egui::Context) -> Pool<DimsResult> {
+    Pool::new(2, ctx, |path: PathBuf| {
+        let dims = decode::image_dims(&path);
+        DimsResult { path, dims }
+    })
+}
+
+// ---------------------------------------------------------------- comic mode images
+
+pub struct ComicImage {
+    pub image: ColorImage,
+    /// Original image size (after EXIF orientation).
+    pub orig: [u32; 2],
+    /// Width of `image` in pixels.
+    pub tex_w: u32,
+    /// No sharper version can be made (shown at full resolution, or limited by the
+    /// GPU texture size), so it is never re-requested when zooming in.
+    pub complete: bool,
+}
+
+pub struct ComicResult {
+    pub path: PathBuf,
+    pub result: Result<ComicImage, String>,
+}
+
+/// Decodes images for comic mode already scaled to the width they are shown at
+/// (`target_w`, read when the job starts): textures are smaller, so uploading them
+/// does not stall scrolling, and downscaling with a proper filter looks better than
+/// the GPU's mipmaps.
+pub fn comic_pool(
+    ctx: egui::Context,
+    target_w: Arc<AtomicU32>,
+    max_tex: Arc<AtomicU32>,
+) -> Pool<ComicResult> {
+    let n = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    // Leave cores for the UI thread / GPU driver (and the thumbnail workers).
+    let n = (n / 2).clamp(1, 4);
+    Pool::new(n, ctx, move |path: PathBuf| {
+        let target = target_w.load(Ordering::Relaxed).max(16);
+        let max = max_tex.load(Ordering::Relaxed).max(1024);
+        let result = decode::load_for_width(&path, target).map(|(img, orig)| {
+            let (w, h) = (img.width().max(1), img.height().max(1));
+            // fit target width, and the GPU texture limit on both sides
+            let s = (target as f64 / w as f64)
+                .min(max as f64 / w as f64)
+                .min(max as f64 / h as f64)
+                .min(1.0);
+            let img = if s < 1.0 {
+                let nw = ((w as f64 * s).round() as u32).max(1);
+                let nh = ((h as f64 * s).round() as u32).max(1);
+                img.resize_exact(nw, nh, image::imageops::FilterType::Triangle)
+            } else {
+                img
+            };
+            let tex_w = img.width();
+            // Also "complete" if it came out narrower than asked for for any other
+            // reason, so a picture can never be re-requested over and over.
+            let complete = tex_w >= orig[0]
+                || tex_w + 1 < target
+                || tex_w >= max - 1
+                || img.height() >= max - 1;
+            ComicImage {
+                image: decode::to_color_image(&img, max),
+                orig,
+                tex_w,
+                complete,
+            }
+        });
+        ComicResult { path, result }
+    })
+}
