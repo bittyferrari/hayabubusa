@@ -1,6 +1,7 @@
 #!/bin/bash
 # Build Hayabubusa.app on macOS
 # Usage: ./build-mac.sh            (build for current arch)
+#        ./build-mac.sh install    (build + copy to /Applications + register file types)
 #        ./build-mac.sh universal  (build arm64 + x86_64 universal binary)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -17,7 +18,7 @@ ICON_SRC="assets/icon.png"
 VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
 
 OUT_DIR="target/release"
-if [[ "${1:-}" == "universal" ]]; then
+if [[ " $* " == *" universal "* ]]; then
   rustup target add aarch64-apple-darwin x86_64-apple-darwin
   cargo build --release --target aarch64-apple-darwin
   cargo build --release --target x86_64-apple-darwin
@@ -70,12 +71,45 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.photography</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>Image</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>public.jpeg</string>
+        <string>public.png</string>
+        <string>org.webmproject.webp</string>
+        <string>com.compuserve.gif</string>
+        <string>com.microsoft.bmp</string>
+        <string>public.tiff</string>
+        <string>com.microsoft.ico</string>
+        <string>com.truevision.tga-image</string>
+        <string>public.image</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST
 
 echo "==> Ad-hoc code signing"
 codesign --force --deep -s - "$APP"
+
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+# ./build-mac.sh install  (or: ./build-mac.sh universal install)
+if [[ " $* " == *" install "* ]]; then
+  echo "==> Installing to /Applications"
+  rm -rf "/Applications/$APP_NAME.app"
+  cp -R "$APP" /Applications/
+  "$LSREGISTER" -f "/Applications/$APP_NAME.app"
+  APP="/Applications/$APP_NAME.app"
+else
+  "$LSREGISTER" -f "$APP"
+fi
 
 echo ""
 echo "Done: $APP"

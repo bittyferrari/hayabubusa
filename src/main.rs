@@ -6,6 +6,8 @@ mod decode;
 mod fileops;
 mod fonts;
 mod i18n;
+#[cfg(target_os = "macos")]
+mod macos_open;
 mod ops;
 mod resident;
 mod util;
@@ -90,6 +92,10 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
 
+    // macOS: files opened from Finder arrive as an AppKit event, not as argv.
+    #[cfg(target_os = "macos")]
+    let mac_rx = macos_open::install(ctx.clone());
+
     eframe::run_native_ext(
         "hayabubusa",
         options,
@@ -100,6 +106,11 @@ fn main() -> eframe::Result {
                 full_pool.requester(),
                 main_hwnd(cc),
             );
+            #[cfg(target_os = "macos")]
+            let resident_rx = {
+                drop(resident_rx);
+                mac_rx
+            };
             Ok(Box::new(app::App::new(
                 cc.egui_ctx.clone(),
                 full_pool,
