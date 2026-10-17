@@ -387,7 +387,8 @@ impl App {
         );
         self.invalidate(&stale);
 
-        self.entries = entries;
+        let old_cursor_idx = self.cursor;
+        let old_entries = std::mem::replace(&mut self.entries, entries);
         sort_entries(&mut self.entries, self.settings.sort_key, self.settings.sort_desc);
         self.images = (0..self.entries.len())
             .filter(|&i| !self.entries[i].is_dir)
@@ -404,6 +405,18 @@ impl App {
             .collect();
         self.anchor = old_anchor.and_then(|p| idx.get(p.as_path()).copied());
         self.cursor = old_cursor.and_then(|p| idx.get(p.as_path()).copied());
+        // The cursor's file is gone (e.g. cut and pasted elsewhere, deleted by another
+        // program): move to the nearest surviving neighbour instead of jumping to the top.
+        if self.cursor.is_none() {
+            if let Some(c) = old_cursor_idx.filter(|&c| c < old_entries.len()) {
+                self.cursor = (c + 1..old_entries.len())
+                    .chain((0..c).rev())
+                    .find_map(|i| idx.get(old_entries[i].path.as_path()).copied());
+                if self.anchor.is_none() {
+                    self.anchor = self.cursor;
+                }
+            }
+        }
         let mut jump = self.cursor.is_none();
         if let Some(sel) = self.pending_select.take() {
             let sel = util::canon(sel);
