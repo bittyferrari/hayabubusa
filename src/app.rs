@@ -1791,6 +1791,9 @@ impl App {
                 }
             });
             if resp.double_clicked() {
+                back = true;
+            }
+            if resp.middle_clicked() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fullscreen));
             }
 

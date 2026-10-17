@@ -1130,12 +1130,16 @@ dependencies = [
 name = "hayabubusa"
 version = "0.1.0"
 dependencies = [
+ "block2 0.6.2",
  "crossbeam-channel",
  "dirs",
  "eframe",
  "image",
  "jpeg-decoder",
  "kamadak-exif",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "raw-window-handle",
  "sys-locale",
  "webp",

@@ -56,7 +56,7 @@ The toolbar's "Rotate left / Rotate right" **overwrites** the selected files dir
 
 | Key | Action |
 |---|---|
-| **Enter** / Esc | Back to folder thumbnails (cursor stays on the current image) |
+| **Enter** / Esc / Double-click | Back to folder thumbnails (cursor stays on the current image) |
 | → ↓ PageDown Space / Wheel down | Next image |
 | ← ↑ PageUp Backspace / Wheel up | Previous image |
 | Home / End | First / last image |
@@ -69,7 +69,7 @@ The toolbar's "Rotate left / Rotate right" **overwrites** the selected files dir
 | Ctrl + C | Copy the current image (as a file); paste it on the desktop |
 | Delete | Move the current image to the Recycle Bin and go to the next one |
 | R | Convert / Resize dialog |
-| F, F11, Double-click | Fullscreen |
+| F, F11, Middle-click | Fullscreen |
 
 Rotation in single image view is only a preview; press Ctrl+S to write it to the file. Moving to another image without saving discards it.
 
